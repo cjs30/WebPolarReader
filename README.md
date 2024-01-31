@@ -7,6 +7,7 @@ The bluetooth protocol/API is now supported by many different browsers. The prog
 
 The column headings and description are:
 _RAW files
+
   PPGsum - This is the sum of the 3 Verity Sense light sensors. See Javascript line: PPGsum[i]=NewPPG[0][i]+NewPPG[1][i]+NewPPG[2][i] 
   PPGsum_f - PPGsum filtered/smoothed with a FIR (see: smoothPPG(devicename,dataobject,[0.025,0.04,0.07,0.13,0.2,0.22,0.2,0.13,0.07,0.04,0.025]))
   PPG_f_reduced - PPGsum but with the number of datapoints reduced by a Ramer–Douglas–Peucker (RDP) algorithm that linearly interpolates values to the resolution displayed. This speeds up the display as plotting PPG_f could slow data collection. The trace is also useful when attempting to plot long time series using Excel etc.
