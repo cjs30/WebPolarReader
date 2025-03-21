@@ -3,7 +3,7 @@ A javascript program to read data from multiple Polar devices (H10 &amp; Verity 
 
 The bluetooth protocol/API is now supported by many different browsers. The program also attempts to detect heart beats from either PPG (Verity Sense) or ECG (H10) devices. You might need to use the scaling buttons for the PPG and ECG as the detection algorithm uses the scaling variable for detection.
 
-[https://github.com/cjs30/WebPolarReader/blob/main/VerityCollectionToolv0.051.html] now provides a download of two files. The RAW file contains everything and can be quite large. The other file contains just the derived data - ie peaks in PPG and the R wave time.
+[https://github.com/cjs30/WebPolarReader/blob/main/VerityCollectionToolv0.057.html] now provides a download of two files. The RAW file contains everything and can be quite large. The other file contains just the derived data - ie peaks in PPG and the R wave time.
 
 The column headings and description are:
 
