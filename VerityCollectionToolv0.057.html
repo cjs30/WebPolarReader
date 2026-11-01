@@ -468,7 +468,7 @@ function printHeartRate(event)
         frame_type=Number(new Uint8Array(data.slice(9,10))[0]);
         decoded=PolarPMDDecoder.decode(DataType,frame_type,new Uint8Array(data.slice(10)));
         ACC=decoded.channels;
-        ACCtime=fillTimeArray(DataType,devicename,data.slice(1,9),dataTime,decoded.sampleCount,(1000/Sense_rate));
+        ACCtime=fillTimeArray(DataType,devicename,data.slice(1,9),dataTime,decoded.sampleCount,decoded.compressed?(1000/Sense_rate):acc_timestep);
         ACC.push([]);
         for(i=0;i<ACC[0].length;i++){ACC[3][i]=Math.round(Math.sqrt(ACC[0][i]**2+ACC[1][i]**2+ACC[2][i]**2)/16*200);}//scaled by 20 to display on PPG graph        
         pushData(devicename,['acc_x','acc_y','acc_z','acc_v'],ACCtime,ACC)
