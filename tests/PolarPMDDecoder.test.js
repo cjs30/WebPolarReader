@@ -24,6 +24,14 @@ test("ECG signed 24-bit little-endian", () => {
     assert.deepEqual(decode(0, 0, Uint8Array.from([255,255,127, 255,255,255, 0,0,128])).channels,
         [[8388607, -1, -8388608]]);
 });
+test("ECG frame type 1 decodes 14-bit values and ignores status bits", () => {
+    const payload = Uint8Array.from([0x34, 0x12, 0xFF, 0xFF, 0x3F, 0xA5]);
+    assert.deepEqual(decode(0, 1, payload).channels, [[0x1234, 0x3FFF]]);
+});
+test("ECG frame type 2 decodes 22-bit values and ignores tag bits", () => {
+    const payload = Uint8Array.from([0x34, 0x12, 0xFF, 0xFF, 0xFF, 0xFF]);
+    assert.deepEqual(decode(0, 2, payload).channels, [[0x3F1234, 0x3FFFFF]]);
+});
 test("raw PPG type 0: four signed 24-bit channels", () => {
     const p = Uint8Array.from([1,2,3,4,5,6,255,255,127,0,0,0, 255,255,255,15,239,239,0,0,128,15,239,239]);
     assert.deepEqual(decode(1, 0, p).channels, [[197121,-1],[394500,-1052913],[8388607,-8388608],[0,-1052913]]);
@@ -36,6 +44,11 @@ test("compressed ACC: signed 6-bit deltas and channel interleaving", () => {
     const ref = Uint8Array.from([0xAE,0xFF,0xC2,0xFF,0xE6,0x03]);
     const p = concat(ref, Uint8Array.from([6,2]), packSigned([15,-25,-10,-14,4,-1],6));
     assert.deepEqual(decode(2, 0x81, p).channels, [[-82,-67,-81],[-62,-87,-83],[998,988,987]]);
+});
+test("compressed ACC type 0 is accepted with 16-bit reference samples", () => {
+    const ref = Uint8Array.from([0,0,0,0,0,0]);
+    const payload = concat(ref, Uint8Array.from([2,1]), packSigned([1,-1,0],2));
+    assert.deepEqual(decode(2, 0x80, payload).channels, [[0,1],[0,-1],[0,0]]);
 });
 test("compressed PPG type 0: four channels", () => {
     const ref = Uint8Array.from([10,0,0,20,0,0,30,0,0,40,0,0]);
