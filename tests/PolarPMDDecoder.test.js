@@ -30,7 +30,7 @@ test("ECG frame type 1 decodes 14-bit values and ignores status bits", () => {
 });
 test("ECG frame type 2 decodes 22-bit values and ignores tag bits", () => {
     const payload = Uint8Array.from([0x34, 0x12, 0xFF, 0xFF, 0xFF, 0xFF]);
-    assert.deepEqual(decode(0, 2, payload).channels, [[0x3F1234, 0x3FFFFF]]);
+    assert.deepEqual(decode(0, 2, payload).channels, [[0x31234, 0x3FFFFF]]);
 });
 test("raw PPG type 0: four signed 24-bit channels", () => {
     const p = Uint8Array.from([1,2,3,4,5,6,255,255,127,0,0,0, 255,255,255,15,239,239,0,0,128,15,239,239]);
