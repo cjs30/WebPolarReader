@@ -2,6 +2,7 @@
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
 <html> <head><title>Polar ECG->PPG timing application</title>
 <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>   
+<script src="PolarPMDDecoder.js"></script>
 <script>
 lineformat=[];newline="\r\n";
 defineLineformats();
@@ -151,7 +152,6 @@ function DataArrayLength(devicename,name){
         return(0);
     }else{return(dataobject[devicename][name].x.length);}
 }
-function completeDeltaFrame(data,num_chan,bytes){headerpointer=10+num_chan*bytes;framepointer=headerpointer+2;data_array=getInitialSensorValues(data.slice(10,headerpointer),bytes);while(framepointer<data.byteLength){DeltaFrameDetails=DeltaFrameDescription(data.slice(headerpointer,framepointer),num_chan);nextheaderpointer=framepointer+DeltaFrameDetails.bytes;Frame=reSlice(ChunkArray(data.slice(framepointer,nextheaderpointer)),DeltaFrameDetails.bits,DeltaFrameDetails.channels);data_array=addDeltaframe(Frame, data_array);headerpointer=nextheaderpointer;framepointer=headerpointer+2;}return data_array;}
 function defineLine(color,name,linetype){return {type:'scattergl',mode:linetype,showlegend: true,line:{color:'rgb('+color+')', width:1}, name:name,x:[],y:[]}}
 function serviceButtons(name,devicetype){
     console.log("Adding service buttons for ",name);
@@ -191,14 +191,7 @@ function fillTimeArray(Type,devicename,t,dTime,num,step){
 return a;}
 
 function createArray(length){var arr=new Array(length||0),i=length;if(arguments.length>1){var args=Array.prototype.slice.call(arguments,1);while(i--) arr[length-1-i]=createArray.apply(this,args);}return arr;}
-function WordstoSignedInteger(words,BitsPerWord){val=0;word_val=2**BitsPerWord;for(i=0;i<words.length;i+=1){val+=words[i]*word_val**i;}bits=words.length*BitsPerWord;if(val>2**(bits-1)){val=val-2**bits;}return val;}
-function getInitialSensorValues(a,bytes){a=new Uint8Array(a);sensors=createArray((a.length/bytes),1);offset=0;while(offset<a.length){sensors[offset/bytes][0]=WordstoSignedInteger(a.slice(offset,offset+bytes),8);offset+=bytes;};return(sensors);}
-function addDeltaframe(frame, data_array){chans=frame[0].length;for(offset=0;offset<frame.length;offset+=1){for(ch=0;ch<chans;ch+=1){data_array[ch].push((+data_array[ch].slice(-1)+frame[offset][ch]));}}return (data_array);}
-function DeltaFrameDescription(b,channels){a=new Uint8Array(b);bits=a[0];number=a[1];return({bits:bits, number:number, bytes:Math.ceil(number*bits/8*channels), channels:channels});}
-function ChunkByte(sbyte){n=[];ts=[1,4,16,64];tg=[3,12,48,192];for(a=0;a<4;a+=1){n[a]=(sbyte & tg[a])/ts[a]};return(n)}
-function ChunkArray(arr){arr=new Uint8Array(arr);offset=0;NewArray=[];while(offset<arr.length){NewArray.push(...ChunkByte(arr[offset]));offset+=1;}return(NewArray);}
 function HPfilter(array,last_in,last_out){f_arr=createArray(array.length);fraction=(1+1/(samplerate*timeconstant));array.forEach(function(value, n){last_out=f_arr[n]=Math.round((value+last_out-last_in)/fraction);last_in=value;});return(f_arr);}
-function reSlice(arr,bits,channels){offset=0;block=bits/2*channels;len=Math.floor(arr.length/block);f_array=createArray(len,channels);while(offset<len*block){for(a=0;a<channels;a+=1){mini_array=arr.slice(offset+a*bits/2,offset+(a+1)*bits/2);f_array[offset/block][a]=WordstoSignedInteger(mini_array,2);};offset+=block;}return(f_array);}
 function onDisconnected(event) {
     const device = event.target;
     var name=device.name;
@@ -472,19 +465,11 @@ function printHeartRate(event)
     }   
     if (DataType == 2){    
         //accelerometer
-        frame_type=Number(new Uint8Array(data.slice(9,10)));resolution=(frame_type+1)*8;step=resolution/8;
-        if(frame_type==1){
-            samples = new Int16Array(data.slice(10,))
-            npoints=samples.byteLength/2;
-            ACC=createArray(npoints,3);
-            for(offset=0;offset<npoints;offset+=3){i=offset/3;ACC[0][i]=samples[offset];ACC[1][i]=samples[offset+1];ACC[2][i]=samples[offset+2];}
-            ACCtime=fillTimeArray(DataType,devicename,data.slice(1,9),dataTime,ACC[0].length,acc_timestep);     
-        }else{
-            //if 128 frame type
-            ACC=completeDeltaFrame(data,3,2); //3 channels, 2 bytes (16bit)
-            ACCtime=fillTimeArray(DataType,devicename,data.slice(1,9),dataTime,ACC[0].length,(1000/Sense_rate));     
-            ACC.push([]);     
-        }
+        frame_type=Number(new Uint8Array(data.slice(9,10))[0]);
+        decoded=PolarPMDDecoder.decode(DataType,frame_type,new Uint8Array(data.slice(10)));
+        ACC=decoded.channels;
+        ACCtime=fillTimeArray(DataType,devicename,data.slice(1,9),dataTime,decoded.sampleCount,(1000/Sense_rate));
+        ACC.push([]);
         for(i=0;i<ACC[0].length;i++){ACC[3][i]=Math.round(Math.sqrt(ACC[0][i]**2+ACC[1][i]**2+ACC[2][i]**2)/16*200);}//scaled by 20 to display on PPG graph        
         pushData(devicename,['acc_x','acc_y','acc_z','acc_v'],ACCtime,ACC)
         resolution=(layoutCombined[devicename].yaxis.range[1]-layoutCombined[devicename].yaxis.range[0])/(document.getElementById("Combined").clientHeight-100);
@@ -493,9 +478,10 @@ function printHeartRate(event)
   if (DataType == 0)
   {
     //ECG
-    samples = new Uint8Array(data.slice(10,))
-    npoints=samples.byteLength/3; ECGdata=createArray(npoints);
-    for(offset=0;offset<samples.byteLength;offset+=3){i=offset/3;ECGdata[i]=WordstoSignedInteger(samples.slice(offset,offset+2),8);}
+    frame_type=Number(new Uint8Array(data.slice(9,10))[0]);
+    decoded=PolarPMDDecoder.decode(DataType,frame_type,new Uint8Array(data.slice(10)));
+    ECGdata=decoded.channels[0];
+    npoints=decoded.sampleCount;
     ECGtime=fillTimeArray(DataType,devicename,data.slice(1,9),dataTime,npoints,ecg_timestep);
     pushData(devicename,['ECG'],ECGtime,[ECGdata]);
     resolution=(layoutCombined[devicename].yaxis.range[1]-layoutCombined[devicename].yaxis.range[0])/(document.getElementById("Combined").clientHeight-100);
@@ -507,8 +493,10 @@ function printHeartRate(event)
     //PPG
     PPGsum=[];PPGsumfilter=[];
     if(!(devicename in last_incom)){last_incom[devicename]=0;last_filter[devicename]=0;}
-    NewPPG=completeDeltaFrame(data,4,3);//4 channels
-    npoints=NewPPG[0].length;    
+    frame_type=Number(new Uint8Array(data.slice(9,10))[0]);
+    decoded=PolarPMDDecoder.decode(DataType,frame_type,new Uint8Array(data.slice(10)));
+    NewPPG=decoded.channels;
+    npoints=decoded.sampleCount;
     for (i=0;i<npoints;i++){PPGsum[i]=NewPPG[0][i]+NewPPG[1][i]+NewPPG[2][i]}
     PPGtime=fillTimeArray(DataType,devicename,data.slice(1,9),dataTime,npoints,1000/samplerate);
     PPGsumfilter=HPfilter(PPGsum,last_incom[devicename],last_filter[devicename])
