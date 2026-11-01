@@ -449,8 +449,60 @@ function DataObjectToCSV(outputstreams){
     return csv;
 }
 
+// Optional raw PMD notification capture for decoder validation.
+var pmdCaptureActive=false;
+var pmdCaptureRecords=[];
+var pmdCaptureLimit=20000;
+function bytesToHex(bytes){return Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');}
+function startPMDCapture(){
+    pmdCaptureRecords=[];pmdCaptureActive=true;
+    document.getElementById('pmdCaptureStart').disabled=true;
+    document.getElementById('pmdCaptureStop').disabled=false;
+    document.getElementById('pmdCaptureDownload').disabled=true;
+    document.getElementById('pmdCaptureStatus').textContent='Recording raw PMD notifications…';
+}
+function stopPMDCapture(){
+    pmdCaptureActive=false;
+    document.getElementById('pmdCaptureStart').disabled=false;
+    document.getElementById('pmdCaptureStop').disabled=true;
+    document.getElementById('pmdCaptureDownload').disabled=(pmdCaptureRecords.length===0);
+    document.getElementById('pmdCaptureStatus').textContent='Capture stopped: '+pmdCaptureRecords.length+' notifications recorded.';
+}
+function capturePMDNotification(event){
+    if(!pmdCaptureActive)return;
+    var view=event.target.value;
+    var bytes=new Uint8Array(view.buffer,view.byteOffset,view.byteLength);
+    var copy=new Uint8Array(bytes);
+    var measurementType=copy.length>0?copy[0]:null;
+    var frameType=copy.length>9?copy[9]:null;
+    var record={
+        receivedAt:new Date().toISOString(),receivedAtUnixMs:Date.now(),
+        deviceName:event.currentTarget.service.device.name,
+        measurementType:measurementType,
+        measurementName:({0:'ECG',1:'PPG',2:'ACC'})[measurementType]||'unknown',
+        frameType:frameType,notificationLength:copy.length,
+        headerHex:bytesToHex(copy.slice(0,Math.min(10,copy.length))),
+        payloadHex:bytesToHex(copy.slice(Math.min(10,copy.length))),
+        notificationHex:bytesToHex(copy)
+    };
+    if(copy.length>=9){try{record.deviceTimestampNs=Number(view.getBigInt64(1,true));}catch(e){}}
+    pmdCaptureRecords.push(record);
+    document.getElementById('pmdCaptureStatus').textContent='Recording: '+pmdCaptureRecords.length+' notifications';
+    if(pmdCaptureRecords.length>=pmdCaptureLimit){stopPMDCapture();document.getElementById('pmdCaptureStatus').textContent+=' (safety limit reached)';}
+}
+function downloadPMDCapture(){
+    if(pmdCaptureActive)stopPMDCapture();
+    if(pmdCaptureRecords.length===0)return;
+    var capture={format:'WebPolarReader raw PMD capture',formatVersion:1,capturedAt:new Date().toISOString(),notificationCount:pmdCaptureRecords.length,records:pmdCaptureRecords};
+    var blob=new Blob([JSON.stringify(capture,null,2)],{type:'application/json'});
+    var url=URL.createObjectURL(blob),a=document.createElement('a');
+    a.href=url;a.download='Polar-PMD-capture-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';
+    document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+}
+
 function printHeartRate(event)
 {    
+    capturePMDNotification(event);
     var dataTime=Date.now();
     var devicename=event.currentTarget.service.device.name;
     var data=event.target.value.buffer;
@@ -578,6 +630,11 @@ function updateGraphs() {
     <button id='Sense' onClick="addDevice('')">Connect a Polar Sensor</button>               
     <button id='emptybuffer' onClick="emptybuffer()">Empty record buffer</button>
     <button id='download' onClick="download()">Download data</button>              
+    <button id='pmdCaptureStart' onClick="startPMDCapture()">Start raw Bluetooth capture</button>
+    <button id='pmdCaptureStop' onClick="stopPMDCapture()" disabled>Stop capture</button>
+    <button id='pmdCaptureDownload' onClick="downloadPMDCapture()" disabled>Download raw capture</button>
+    <span id='pmdCaptureStatus'>Capture idle.</span>
+    <br>
     <br><input type="text" id="markername" size="20" title="Enter your marker text here">
     <button title="Adds a marker button with the specified text" onClick="AddMarker()">Make marker button</button>
     <button title="Loads a marker set" onClick="LoadMarkers()">Load</button>
