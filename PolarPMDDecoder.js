@@ -99,15 +99,37 @@
         var frameType = frameTypeByte & 0x7F;
         var channels;
 
-        if (measurementType === 0) { // ECG: signed 24-bit microvolts
-            if (compressed || frameType !== 0) throw new Error("Unsupported ECG frame encoding: " + frameTypeByte);
-            channels = decodeRaw(bytes, 1, 3);
+        if (measurementType === 0) { // ECG frame types 0, 1 and 2
+            if (compressed) throw new Error("Compressed ECG frames are not supported");
+            if (frameType === 0) {
+                channels = decodeRaw(bytes, 1, 3); // signed 24-bit microvolts
+            } else if (frameType === 1 || frameType === 2) {
+                var bytesPerSample = 3;
+                if (!bytes.length || bytes.length % bytesPerSample) {
+                    throw new RangeError("ECG frame length is not a non-zero multiple of 3");
+                }
+                channels = [[]];
+                for (var offset = 0; offset < bytes.length; offset += 3) {
+                    if (frameType === 1) {
+                        // 14-bit unsigned ECG value; third byte contains contact/status flags.
+                        channels[0].push(bytes[offset] | ((bytes[offset + 1] & 0x3F) << 8));
+                    } else {
+                        // 22-bit unsigned ECG value; upper two bits carry ECG/pace tags.
+                        channels[0].push(bytes[offset] | (bytes[offset + 1] << 8) |
+                            ((bytes[offset + 2] & 0x03) << 16));
+                    }
+                }
+            } else {
+                throw new Error("Unsupported ECG raw frame type " + frameType);
+            }
         } else if (measurementType === 1) { // PPG type 0: three PPG channels plus ambient
             if (frameType !== 0) throw new Error("Unsupported PPG frame type " + frameType);
             channels = compressed ? decodeDelta(bytes, 4, 3) : decodeRaw(bytes, 4, 3);
         } else { // ACC: x, y, z
             if (compressed) {
-                if (frameType !== 1) throw new Error("Unsupported compressed ACC frame type " + frameType);
+                if (frameType !== 0 && frameType !== 1) {
+                    throw new Error("Unsupported compressed ACC frame type " + frameType);
+                }
                 channels = decodeDelta(bytes, 3, 2);
             } else {
                 if (frameType > 2) throw new Error("Unsupported raw ACC frame type " + frameType);
